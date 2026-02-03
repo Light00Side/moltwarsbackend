@@ -7,7 +7,8 @@ import fs from 'fs';
 
 const PORT = process.env.PORT || 8080;
 const TICK_RATE = 10; // 100ms ticks
-const WORLD_SIZE = 256; // tiles (square)
+const WORLD_W = 512; // tiles (width)
+const WORLD_H = 256; // tiles (height)
 const VIEW_RADIUS = 12; // tiles around player
 const SAVE_PATH = './data/world.json';
 const SAVE_INTERVAL_MS = 5000;
@@ -137,8 +138,8 @@ function noise1(x) {
 // In-memory state (authoritative)
 const players = new Map(); // playerId -> {id, name, x, y, hp, apiKey, inv, spawn, active, lastAttack, stats}
 const sockets = new Map(); // playerId -> ws
-let world = new Uint8Array(WORLD_SIZE * WORLD_SIZE);
-let surfaceMap = new Int16Array(WORLD_SIZE);
+let world = new Uint8Array(WORLD_W * WORLD_H);
+let surfaceMap = new Int16Array(WORLD_W);
 let villages = []; // [{x,y}]
 const chests = new Map(); // key "x,y" -> {items:{[item]:count}}
 const animals = new Map(); // id -> {id, type, x, y, hp, vx, vy}
@@ -158,11 +159,11 @@ const SKINS = [
 ];
 
 function idx(x, y) {
-  return y * WORLD_SIZE + x;
+  return y * WORLD_W + x;
 }
 
 function getTile(x, y) {
-  if (x < 0 || y < 0 || x >= WORLD_SIZE || y >= WORLD_SIZE) return TILE.AIR;
+  if (x < 0 || y < 0 || x >= WORLD_W || y >= WORLD_H) return TILE.AIR;
   return world[idx(x, y)];
 }
 
@@ -171,19 +172,19 @@ function isSolid(t) {
 }
 
 function setTile(x, y, t) {
-  if (x < 0 || y < 0 || x >= WORLD_SIZE || y >= WORLD_SIZE) return;
+  if (x < 0 || y < 0 || x >= WORLD_W || y >= WORLD_H) return;
   world[idx(x, y)] = t;
 }
 
 function genWorld() {
   // noise-based heightmap (higher roughness)
-  const minSurface = Math.floor(WORLD_SIZE * 0.10);
-  const maxSurface = Math.floor(WORLD_SIZE * 0.35);
-  const base = Math.floor(WORLD_SIZE * 0.22);
+  const minSurface = Math.floor(WORLD_H * 0.10);
+  const maxSurface = Math.floor(WORLD_H * 0.35);
+  const base = Math.floor(WORLD_H * 0.22);
 
-  for (let x = 0; x < WORLD_SIZE; x++) {
+  for (let x = 0; x < WORLD_W; x++) {
     let h = base;
-    let amp = WORLD_SIZE * 0.08;
+    let amp = WORLD_H * 0.08;
     let freq = 0.01;
     for (let o = 0; o < 4; o++) {
       const n = noise1(x * freq) * 2 - 1;
@@ -195,8 +196,8 @@ function genWorld() {
     surfaceMap[x] = h;
   }
 
-  for (let y = 0; y < WORLD_SIZE; y++) {
-    for (let x = 0; x < WORLD_SIZE; x++) {
+  for (let y = 0; y < WORLD_H; y++) {
+    for (let x = 0; x < WORLD_W; x++) {
       const s = surfaceMap[x];
       if (y < s - 1) {
         setTile(x, y, TILE.SKY);
@@ -207,15 +208,15 @@ function genWorld() {
         if (y < s + dirtDepth) {
           setTile(x, y, TILE.DIRT);
         } else {
-          setTile(x, y, hash2(x, y) < 0.06 ? TILE.ORE : TILE.STONE);
+          setTile(x, y, hash2(x, y) < 0.18 ? TILE.ORE : TILE.STONE);
         }
       }
     }
   }
 
   // Caves (wider + larger)
-  for (let y = 0; y < WORLD_SIZE; y++) {
-    for (let x = 0; x < WORLD_SIZE; x++) {
+  for (let y = 0; y < WORLD_H; y++) {
+    for (let x = 0; x < WORLD_W; x++) {
       const s = surfaceMap[x];
       if (y <= s + 2) continue; // keep surface intact
       const n = noise2(x * 0.045, y * 0.045);
@@ -224,7 +225,7 @@ function genWorld() {
   }
 
   // Trees on surface (spawn on grass)
-  for (let x = 0; x < WORLD_SIZE; x++) {
+  for (let x = 0; x < WORLD_W; x++) {
     if (rand() < 0.05) {
       const y = surfaceMap[x] - 1;
       if (getTile(x, y) === TILE.GRASS) {
@@ -243,8 +244,8 @@ function genVillages() {
   villages = [];
   for (let i = 0; i < 6; i++) {
     villages.push({
-      x: Math.floor(rand() * WORLD_SIZE),
-      y: Math.floor(WORLD_SIZE * 0.25 + rand() * WORLD_SIZE * 0.5),
+      x: Math.floor(rand() * WORLD_W),
+      y: Math.floor(WORLD_H * 0.25 + rand() * WORLD_H * 0.5),
     });
   }
 }
@@ -255,8 +256,8 @@ function genAnimals() {
     animals.set(randomUUID(), {
       id: randomUUID(),
       type: 'boar',
-      x: Math.floor(rand() * WORLD_SIZE),
-      y: Math.floor(WORLD_SIZE * 0.25 + rand() * WORLD_SIZE * 0.5),
+      x: Math.floor(rand() * WORLD_W),
+      y: Math.floor(WORLD_H * 0.25 + rand() * WORLD_H * 0.5),
       hp: 20,
       vx: 0,
       vy: 0,
@@ -287,8 +288,8 @@ function genNpcs() {
     npcs.set(id, {
       id,
       name: `${base}${suffix}`,
-      x: Math.floor(rand() * WORLD_SIZE),
-      y: Math.floor(WORLD_SIZE * 0.25 + rand() * WORLD_SIZE * 0.5),
+      x: Math.floor(rand() * WORLD_W),
+      y: Math.floor(WORLD_H * 0.25 + rand() * WORLD_H * 0.5),
       hp: 100,
       inv: {},
       vx: 0,
@@ -308,7 +309,7 @@ function loadWorld() {
       if (data?.players) {
         for (const p of data.players) players.set(p.id, p);
       }
-      if (data?.world && data.world.length === WORLD_SIZE * WORLD_SIZE) {
+      if (data?.world && data.world.length === WORLD_W * WORLD_H) {
         world = Uint8Array.from(data.world);
       } else {
         genWorld();
@@ -352,17 +353,17 @@ function saveWorld() {
 }
 
 function findSurfaceY(x) {
-  const sx = Math.max(0, Math.min(WORLD_SIZE - 1, x));
+  const sx = Math.max(0, Math.min(WORLD_W - 1, x));
   const s = surfaceMap[sx];
   if (s && s > 1) return s - 2;
-  for (let y = 0; y < WORLD_SIZE - 1; y++) {
+  for (let y = 0; y < WORLD_H - 1; y++) {
     if (isSolid(getTile(sx, y + 1))) return Math.max(0, y - 1);
   }
-  return Math.floor(WORLD_SIZE * 0.2);
+  return Math.floor(WORLD_H * 0.2);
 }
 
 function spawnPlayer(name) {
-  const spawnX = Math.floor(rand() * WORLD_SIZE);
+  const spawnX = Math.floor(rand() * WORLD_W);
   const surfaceY = findSurfaceY(spawnX);
   return {
     id: randomUUID(),
@@ -446,8 +447,8 @@ function applyGravity(entity) {
   const x = Math.floor(entity.x);
   const y = Math.floor(entity.y);
   const below = getTile(x, y + 1);
-  if (!isSolid(below) && y + 1 < WORLD_SIZE) {
-    entity.y = Math.min(WORLD_SIZE - 1, y + 1);
+  if (!isSolid(below) && y + 1 < WORLD_H) {
+    entity.y = Math.min(WORLD_H - 1, y + 1);
   }
   // prevent clipping into solids
   const here = getTile(x, Math.floor(entity.y));
@@ -457,8 +458,8 @@ function applyGravity(entity) {
 }
 
 function tryMove(entity, dx, dy) {
-  const nx = Math.max(0, Math.min(WORLD_SIZE - 1, entity.x + dx));
-  const ny = Math.max(0, Math.min(WORLD_SIZE - 1, entity.y + dy));
+  const nx = Math.max(0, Math.min(WORLD_W - 1, entity.x + dx));
+  const ny = Math.max(0, Math.min(WORLD_H - 1, entity.y + dy));
   const t = getTile(Math.floor(nx), Math.floor(ny));
   if (!isSolid(t)) {
     entity.x = nx;
@@ -546,7 +547,9 @@ app.get('/state', (req, res) => {
 function getWorldSnapshot() {
   return {
     ok: true,
-    worldSize: WORLD_SIZE,
+    worldWidth: WORLD_W,
+    worldHeight: WORLD_H,
+    worldSize: WORLD_W,
     tiles: Array.from(world),
     players: Array.from(players.values()).map(({ apiKey, ...rest }) => rest),
     animals: Array.from(animals.values()),
