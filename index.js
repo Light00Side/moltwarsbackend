@@ -60,10 +60,10 @@ const RECIPES = {
 
 // Skins (replace with CDN URLs)
 const SKINS = [
-  'https://cdn.moltwallet.app/tokens/moltwars/skins/molty.png',
-  'https://cdn.moltwallet.app/tokens/moltwars/skins/claw.png',
-  'https://cdn.moltwallet.app/tokens/moltwars/skins/clawer.png',
-  'https://cdn.moltwallet.app/tokens/moltwars/skins/clawbot.png',
+  'https://cdn.moltwars.xyz/skins/molty.png',
+  'https://cdn.moltwars.xyz/skins/claw.png',
+  'https://cdn.moltwars.xyz/skins/clawer.png',
+  'https://cdn.moltwars.xyz/skins/clawbot.png',
 ];
 
 function idx(x, y) {
