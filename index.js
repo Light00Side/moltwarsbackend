@@ -561,6 +561,25 @@ app.get('/world', (req, res) => {
   res.json(getWorldSnapshot());
 });
 
+// Public leaderboard (safe)
+app.get('/leaderboard', (req, res) => {
+  const list = Array.from(players.values()).map((p) => {
+    const stats = p.stats || {};
+    return {
+      id: p.id,
+      name: p.name,
+      kills: stats.kills || 0,
+      deaths: stats.deaths || 0,
+      kd: stats.deaths ? (stats.kills || 0) / stats.deaths : stats.kills || 0,
+      blocksMined: stats.blocksMined || 0,
+      itemsCrafted: stats.itemsCrafted || 0,
+      playtimeMs: stats.playtimeMs || 0,
+    };
+  });
+  list.sort((a, b) => b.kills - a.kills);
+  res.json({ ok: true, players: list });
+});
+
 const server = app.listen(PORT, () => {
   console.log(`Moltwars server running on :${PORT}`);
 });
