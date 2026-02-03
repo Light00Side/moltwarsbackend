@@ -61,6 +61,7 @@ const ITEM = {
   WOOD: 'wood',
   RATION: 'ration',
   SWORD: 'sword',
+  MEAT: 'meat',
 };
 
 // Seeded RNG (deterministic world gen)
@@ -482,7 +483,7 @@ wss.on('connection', (ws, req) => {
           a.vy = Math.sign(a.y - p.y) * 2;
           if (a.hp <= 0) {
             animals.delete(a.id);
-            p.inv[ITEM.RATION] = (p.inv[ITEM.RATION] || 0) + 1;
+            p.inv[ITEM.MEAT] = (p.inv[ITEM.MEAT] || 0) + 1;
           }
         }
       }
