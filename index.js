@@ -32,6 +32,7 @@ const ITEM = {
   ORE: 'ore',
   WOOD: 'wood',
   RATION: 'ration',
+  SWORD: 'sword',
 };
 
 // Biomes (scaffold for future)
