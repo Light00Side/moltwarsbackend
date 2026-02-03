@@ -203,7 +203,7 @@ function genWorld() {
       } else if (y === s - 1) {
         setTile(x, y, TILE.GRASS);
       } else {
-        const dirtDepth = 3 + Math.floor(hash2(x, 9999) * 6); // 3-8
+        const dirtDepth = 6 + Math.floor(hash2(x, 9999) * 10); // 6-16
         if (y < s + dirtDepth) {
           setTile(x, y, TILE.DIRT);
         } else {
@@ -480,27 +480,27 @@ function tickAnimals() {
 
 function tickNpcs() {
   for (const n of npcs.values()) {
-    if (rand() < 0.25) {
+    if (rand() < 0.1) {
       n.vx = Math.floor(rand() * 3) - 1;
       n.vy = 0;
     }
-    tryMove(n, n.vx * 0.5, n.vy * 0.0);
+    tryMove(n, n.vx * 0.2, 0);
     applyGravity(n);
 
-    // Mine nearby block sometimes
-    if (rand() < 0.05) {
+    // Mine nearby block (slower)
+    if (rand() < 0.008) {
       const tx = Math.floor(n.x + (rand() * 3 - 1));
       const ty = Math.floor(n.y + (rand() * 3 - 1));
       const t = getTile(tx, ty);
-      if (t !== TILE.AIR) {
+      if (t !== TILE.AIR && t !== TILE.SKY) {
         setTile(tx, ty, TILE.AIR);
         const item = t === TILE.TREE ? ITEM.WOOD : t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
         n.inv[item] = (n.inv[item] || 0) + 1;
       }
     }
 
-    // Build occasionally if has materials
-    if (rand() < 0.03) {
+    // Build occasionally if has materials (slower)
+    if (rand() < 0.005) {
       const buildTile = [TILE.DIRT, TILE.STONE, TILE.TREE][Math.floor(rand() * 3)];
       const map = {
         [TILE.DIRT]: ITEM.DIRT,
