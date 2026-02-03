@@ -203,7 +203,7 @@ function genWorld() {
       } else if (y === s - 1) {
         setTile(x, y, TILE.GRASS);
       } else {
-        const dirtDepth = 6 + Math.floor(hash2(x, 9999) * 10); // 6-16
+        const dirtDepth = 25;
         if (y < s + dirtDepth) {
           setTile(x, y, TILE.DIRT);
         } else {
