@@ -211,13 +211,13 @@ function genWorld() {
     }
   }
 
-  // Caves (high amount)
+  // Caves (wider + larger)
   for (let y = 0; y < WORLD_SIZE; y++) {
     for (let x = 0; x < WORLD_SIZE; x++) {
       const s = surfaceMap[x];
       if (y <= s + 2) continue; // keep surface intact
-      const n = noise2(x * 0.08, y * 0.08);
-      if (n > 0.62) setTile(x, y, TILE.AIR);
+      const n = noise2(x * 0.045, y * 0.045);
+      if (n > 0.55) setTile(x, y, TILE.AIR);
     }
   }
 
