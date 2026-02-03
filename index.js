@@ -135,7 +135,7 @@ function noise1(x) {
 }
 
 // In-memory state (authoritative)
-const players = new Map(); // playerId -> {id, name, x, y, hp, apiKey, inv, spawn, active, lastAttack}
+const players = new Map(); // playerId -> {id, name, x, y, hp, apiKey, inv, spawn, active, lastAttack, stats}
 const sockets = new Map(); // playerId -> ws
 let world = new Uint8Array(WORLD_SIZE * WORLD_SIZE);
 let surfaceMap = new Int16Array(WORLD_SIZE);
@@ -374,6 +374,14 @@ function spawnPlayer(name) {
     inv: {},
     active: null,
     lastAttack: 0,
+    stats: {
+      kills: 0,
+      deaths: 0,
+      blocksMined: 0,
+      itemsCrafted: 0,
+      playtimeMs: 0,
+      lastTick: Date.now(),
+    },
     spawn: { x: spawnX, y: surfaceY },
     skin: SKINS[Math.floor(rand() * SKINS.length)],
   };
@@ -619,6 +627,8 @@ wss.on('connection', (ws, req) => {
         if (t) {
           t.hp = Math.max(0, t.hp - dmg);
           if (t.hp === 0) {
+            if (p.stats) p.stats.kills += 1;
+            if (t.stats) t.stats.deaths += 1;
             // drop all loot into a chest at death location
             const key = `${t.x},${t.y}`;
             const chest = chests.get(key) || { items: {} };
@@ -659,10 +669,11 @@ wss.on('connection', (ws, req) => {
       if (data.type === 'mine') {
         const { x, y } = data;
         const t = getTile(x, y);
-        if (t !== TILE.AIR) {
+        if (t !== TILE.AIR && t !== TILE.SKY) {
           setTile(x, y, TILE.AIR);
           const item = t === TILE.TREE ? ITEM.WOOD : t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
           p.inv[item] = (p.inv[item] || 0) + 1;
+          if (p.stats) p.stats.blocksMined += 1;
         }
       }
       if (data.type === 'build') {
@@ -690,6 +701,7 @@ wss.on('connection', (ws, req) => {
         if (ok) {
           for (const [k, v] of Object.entries(r.in)) p.inv[k] -= v;
           for (const [k, v] of Object.entries(r.out)) p.inv[k] = (p.inv[k] || 0) + v;
+          if (p.stats) p.stats.itemsCrafted += 1;
         }
       }
       if (data.type === 'openChest') {
@@ -757,6 +769,12 @@ setInterval(() => {
     const p = players.get(playerId);
     if (!p) continue;
     applyGravity(p);
+    if (p.stats) {
+      const now = Date.now();
+      const last = p.stats.lastTick || now;
+      p.stats.playtimeMs += Math.max(0, now - last);
+      p.stats.lastTick = now;
+    }
     const nearbyPlayers = Array.from(players.values())
       .filter(o => Math.abs(o.x - p.x) <= VIEW_RADIUS && Math.abs(o.y - p.y) <= VIEW_RADIUS)
       .map(({ apiKey, ...rest }) => rest);
