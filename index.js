@@ -23,6 +23,7 @@ const TILE = {
   STONE: 2,
   ORE: 3,
   TREE: 4,
+  GRASS: 5,
 };
 
 // Item defs (loaded from defs.json)
@@ -124,39 +125,50 @@ function getTile(x, y) {
   return world[idx(x, y)];
 }
 
+function isSolid(t) {
+  return t !== TILE.AIR;
+}
+
 function setTile(x, y, t) {
   if (x < 0 || y < 0 || x >= WORLD_SIZE || y >= WORLD_SIZE) return;
   world[idx(x, y)] = t;
 }
 
 function genWorld() {
-  const skyH = Math.floor(WORLD_SIZE * 0.2);
-  const surfaceH = Math.floor(WORLD_SIZE * 0.6);
-  const undergroundStart = skyH + surfaceH;
+  // heightmap-based terrain
+  const minSurface = Math.floor(WORLD_SIZE * 0.3);
+  const maxSurface = Math.floor(WORLD_SIZE * 0.7);
+  const surface = new Array(WORLD_SIZE);
+  let h = Math.floor(WORLD_SIZE * 0.55);
+
+  for (let x = 0; x < WORLD_SIZE; x++) {
+    h += Math.floor((rand() - 0.5) * 3); // gentle variation
+    h = Math.max(minSurface, Math.min(maxSurface, h));
+    surface[x] = h;
+  }
 
   for (let y = 0; y < WORLD_SIZE; y++) {
     for (let x = 0; x < WORLD_SIZE; x++) {
-      if (y < skyH) {
+      const s = surface[x];
+      if (y < s - 1) {
         setTile(x, y, TILE.AIR);
-      } else if (y < undergroundStart) {
-        const depth = y - skyH;
-        if (depth < surfaceH * 0.35) setTile(x, y, TILE.DIRT);
-        else setTile(x, y, rand() < 0.06 ? TILE.ORE : TILE.STONE);
+      } else if (y === s - 1) {
+        setTile(x, y, TILE.GRASS);
+      } else if (y < s + 4) {
+        setTile(x, y, TILE.DIRT);
       } else {
-        setTile(x, y, rand() < 0.12 ? TILE.ORE : TILE.STONE);
+        setTile(x, y, rand() < 0.08 ? TILE.ORE : TILE.STONE);
       }
     }
   }
 
-  // Trees on surface
+  // Trees on surface (spawn on grass)
   for (let x = 0; x < WORLD_SIZE; x++) {
-    if (rand() < 0.06) {
-      for (let y = skyH; y < skyH + 10; y++) {
-        if (getTile(x, y) === TILE.DIRT) {
-          setTile(x, y - 1, TILE.TREE);
-          setTile(x, y - 2, TILE.TREE);
-          break;
-        }
+    if (rand() < 0.05) {
+      const y = surface[x] - 1;
+      if (getTile(x, y) === TILE.GRASS) {
+        setTile(x, y - 1, TILE.TREE);
+        setTile(x, y - 2, TILE.TREE);
       }
     }
   }
@@ -347,15 +359,39 @@ function nearbyNpcs(p) {
   return out;
 }
 
+function applyGravity(entity) {
+  const x = Math.floor(entity.x);
+  const y = Math.floor(entity.y);
+  const below = getTile(x, y + 1);
+  if (!isSolid(below) && y + 1 < WORLD_SIZE) {
+    entity.y = Math.min(WORLD_SIZE - 1, y + 1);
+  }
+  // prevent clipping into solids
+  const here = getTile(x, Math.floor(entity.y));
+  if (isSolid(here)) {
+    entity.y = Math.max(0, y - 1);
+  }
+}
+
+function tryMove(entity, dx, dy) {
+  const nx = Math.max(0, Math.min(WORLD_SIZE - 1, entity.x + dx));
+  const ny = Math.max(0, Math.min(WORLD_SIZE - 1, entity.y + dy));
+  const t = getTile(Math.floor(nx), Math.floor(ny));
+  if (!isSolid(t)) {
+    entity.x = nx;
+    entity.y = ny;
+  }
+}
+
 function tickAnimals() {
   for (const a of animals.values()) {
-    // random wander
+    // random wander (horizontal mostly)
     if (rand() < 0.3) {
       a.vx = Math.floor(rand() * 3) - 1;
-      a.vy = Math.floor(rand() * 3) - 1;
+      a.vy = 0;
     }
-    a.x += a.vx * 0.2;
-    a.y += a.vy * 0.2;
+    tryMove(a, a.vx * 0.5, a.vy * 0.0);
+    applyGravity(a);
   }
 }
 
@@ -363,10 +399,10 @@ function tickNpcs() {
   for (const n of npcs.values()) {
     if (rand() < 0.25) {
       n.vx = Math.floor(rand() * 3) - 1;
-      n.vy = Math.floor(rand() * 3) - 1;
+      n.vy = 0;
     }
-    n.x += n.vx * 0.3;
-    n.y += n.vy * 0.3;
+    tryMove(n, n.vx * 0.5, n.vy * 0.0);
+    applyGravity(n);
 
     // Mine nearby block sometimes
     if (rand() < 0.05) {
@@ -486,8 +522,7 @@ wss.on('connection', (ws, req) => {
       if (data.type === 'move') {
         const dx = Math.max(-1, Math.min(1, data.dx || 0));
         const dy = Math.max(-1, Math.min(1, data.dy || 0));
-        p.x = Math.max(0, Math.min(WORLD_SIZE - 1, p.x + dx));
-        p.y = Math.max(0, Math.min(WORLD_SIZE - 1, p.y + dy));
+        tryMove(p, dx, dy);
       }
       if (data.type === 'attack' && data.targetId) {
         const now = Date.now();
@@ -637,6 +672,7 @@ setInterval(() => {
     if (ws.readyState !== 1) continue;
     const p = players.get(playerId);
     if (!p) continue;
+    applyGravity(p);
     const nearbyPlayers = Array.from(players.values())
       .filter(o => Math.abs(o.x - p.x) <= VIEW_RADIUS && Math.abs(o.y - p.y) <= VIEW_RADIUS)
       .map(({ apiKey, ...rest }) => rest);
