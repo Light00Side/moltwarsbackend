@@ -24,6 +24,7 @@ const TILE = {
   ORE: 3,
   TREE: 4,
   GRASS: 5,
+  SKY: 6,
 };
 
 // Item defs (loaded from defs.json)
@@ -127,7 +128,7 @@ function getTile(x, y) {
 }
 
 function isSolid(t) {
-  return t !== TILE.AIR;
+  return t !== TILE.AIR && t !== TILE.SKY;
 }
 
 function setTile(x, y, t) {
@@ -153,7 +154,7 @@ function genWorld() {
     for (let x = 0; x < WORLD_SIZE; x++) {
       const s = surface[x];
       if (y < s - 1) {
-        setTile(x, y, TILE.AIR);
+        setTile(x, y, TILE.SKY);
       } else if (y === s - 1) {
         setTile(x, y, TILE.GRASS);
       } else if (y < s + 10) {
