@@ -466,7 +466,7 @@ wss.on('connection', (ws, req) => {
       if (data.type === 'attack' && data.targetId) {
         const now = Date.now();
         const active = p.active;
-        const baseDmg = 5;
+        const baseDmg = 10;
         let dmg = baseDmg;
         let cd = 800; // default cooldown ms
         if (active && ITEM_DEFS.items?.[active]?.tags?.includes('weapon')) {

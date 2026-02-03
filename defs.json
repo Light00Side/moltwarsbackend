@@ -5,7 +5,7 @@
     "ore": { "id": "ore", "tags": ["material"], "stack": 999 },
     "wood": { "id": "wood", "tags": ["material"], "stack": 999 },
     "meat": { "id": "meat", "tags": ["food"], "heal": 20, "stack": 99 },
-    "sword": { "id": "sword", "tags": ["weapon","melee"], "dmg": 5, "cooldown": 700, "stack": 1 }
+    "sword": { "id": "sword", "tags": ["weapon","melee"], "dmg": 10, "cooldown": 700, "stack": 1 }
   },
   "recipes": {
   }
