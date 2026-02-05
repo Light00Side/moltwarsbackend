@@ -620,10 +620,9 @@ function assignNpcGoal(n) {
     const stage = (n.goalStage || 0) % 3; // 0 shaft,1 diag,2 shaft
     goal = stage == 1 ? 'diag' : 'shaft';
     n.goalStage = (stage + 1) % 3;
-  } else if (n.y < surface + 2) goal = 'shaft';
-  else if (r < 0.6) goal = 'tunnel';
-  else if (r < 0.85) goal = 'wander';
-  else goal = 'build';
+  } else {
+    goal = 'shaft';
+  }
   n.goal = goal;
   n.goalDir = n.roamX != null ? (n.roamX > n.x ? 1 : -1) : (rand() < 0.5 ? -1 : 1);
   n.goalUntil = now + Math.floor(20000 + rand() * 20000);
@@ -691,7 +690,9 @@ function tickNpcs() {
       const dir = n.goalDir || (rand() < 0.5 ? -1 : 1);
       n.vx = dir;
       tryMove(n, dir * 0.75, 0.75);
-    } else if (goal === 'surface') {
+    } else if (goal === 'surface') { // deprecated
+      // no-op
+
       if (keepAboveGround(n)) {
         n.vx = 0;
         n.vy = -1;
