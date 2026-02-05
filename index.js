@@ -511,15 +511,15 @@ function tickAnimals() {
 
 function tickNpcs() {
   for (const n of npcs.values()) {
-    if (rand() < 0.1) {
+    if (rand() < 0.4) {
       n.vx = Math.floor(rand() * 3) - 1;
       n.vy = 0;
     }
-    tryMove(n, n.vx * 0.2, 0);
+    tryMove(n, n.vx * 0.6, 0);
     applyGravity(n);
 
-    // Mine nearby block (slower)
-    if (rand() < 0.008) {
+    // Mine nearby block (faster)
+    if (rand() < 0.02) {
       const tx = Math.floor(n.x + (rand() * 3 - 1));
       const ty = Math.floor(n.y + (rand() * 3 - 1));
       const t = getTile(tx, ty);
@@ -530,8 +530,8 @@ function tickNpcs() {
       }
     }
 
-    // Build occasionally if has materials (slower)
-    if (rand() < 0.005) {
+    // Build occasionally if has materials (faster)
+    if (rand() < 0.015) {
       const buildTile = [TILE.DIRT, TILE.STONE, TILE.TREE][Math.floor(rand() * 3)];
       const map = {
         [TILE.DIRT]: ITEM.DIRT,
