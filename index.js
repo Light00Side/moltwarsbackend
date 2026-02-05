@@ -292,25 +292,26 @@ function genAnimals() {
   }
 }
 
+const NPC_NAMES = [
+  'Molty',
+  'Claw',
+  'Clawer',
+  'Clawbot',
+  'Moltling',
+  'Rune',
+  'Ash',
+  'Ember',
+  'Sable',
+  'Nova',
+  'Iris',
+  'Vex',
+];
+
 function genNpcs() {
   npcs.clear();
-  const names = [
-    'Molty',
-    'Claw',
-    'Clawer',
-    'Clawbot',
-    'Moltling',
-    'Rune',
-    'Ash',
-    'Ember',
-    'Sable',
-    'Nova',
-    'Iris',
-    'Vex',
-  ];
   for (let i = 0; i < 40; i++) {
     const id = randomUUID();
-    const base = names[i % names.length];
+    const base = NPC_NAMES[i % NPC_NAMES.length];
     const suffix = rand() < 0.4 ? `-${Math.floor(rand() * 90 + 10)}` : '';
     npcs.set(id, {
       id,
@@ -588,6 +589,24 @@ function tickNpcs() {
     const first = npcs.keys().next().value;
     if (!first) break;
     npcs.delete(first);
+  }
+
+  // respawn if below cap
+  if (npcs.size < 40 && rand() < 0.08) {
+    const id = randomUUID();
+    const base = NPC_NAMES[Math.floor(rand() * NPC_NAMES.length)];
+    const suffix = rand() < 0.4 ? `-${Math.floor(rand() * 90 + 10)}` : '';
+    npcs.set(id, {
+      id,
+      name: `${base}${suffix}`,
+      x: Math.floor(rand() * WORLD_W),
+      y: Math.floor(WORLD_H * 0.6 + rand() * WORLD_H * 0.35),
+      hp: 100,
+      inv: {},
+      vx: 0,
+      vy: 0,
+      skin: SKINS[Math.floor(rand() * SKINS.length)],
+    });
   }
 
   for (const n of npcs.values()) {
