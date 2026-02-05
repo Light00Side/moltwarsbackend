@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 8080;
 // If using Cloudflare Worker/DO fanout, clients should connect to server.moltwars.xyz (edge).
 const TICK_RATE = 10; // 100ms ticks
 const WORLD_W = 576; // tiles (width)
-const WORLD_H = 192; // tiles (height)
+const WORLD_H = 288; // tiles (height)
 const VIEW_RADIUS = 12; // tiles around player
 const SAVE_PATH = './data/world.json';
 const SAVE_INTERVAL_MS = 5000;
