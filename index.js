@@ -148,6 +148,7 @@ const npcs = new Map(); // id -> {id, name, x, y, hp, inv, vx, vy}
 const chatLog = []; // {ts, message}
 const CHAT_MAX = 200;
 const INACTIVE_TIMEOUT_MS = 30 * 1000;
+const MAX_PLAYERS = 5;
 
 const NPC_CHAT = [
   'Want to trade food for ore?',
@@ -702,6 +703,8 @@ function tickNpcs() {
 app.post('/join', (req, res) => {
   const { name } = req.body || {};
   if (!name) return res.status(400).json({ ok: false, error: 'name required' });
+  const activeCount = Array.from(players.values()).filter(isActivePlayer).length;
+  if (activeCount >= MAX_PLAYERS) return res.status(429).json({ ok: false, error: 'server full' });
   for (const p of players.values()) {
     if (p.name.toLowerCase() === String(name).toLowerCase()) {
       return res.status(409).json({ ok: false, error: 'name taken' });
