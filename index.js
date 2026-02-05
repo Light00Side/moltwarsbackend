@@ -532,6 +532,11 @@ function avoidVoid(entity) {
   return false;
 }
 
+function isBelowDirt(x, y) {
+  const surface = surfaceMap[Math.max(0, Math.min(WORLD_W - 1, Math.floor(x)))] || Math.floor(WORLD_H * 0.25);
+  return y > surface + 2;
+}
+
 function keepAboveGround(entity) {
   const x = Math.max(0, Math.min(WORLD_W - 1, Math.floor(entity.x)));
   const surface = surfaceMap[x] || Math.floor(WORLD_H * 0.25);
@@ -668,7 +673,7 @@ function tickNpcs() {
     applyGravity(n);
 
     // Mine nearby block (goal-driven)
-    if (goal === 'tunnel' ? rand() < 0.15 : rand() < 0.03) {
+    if (isBelowDirt(n.x, n.y) && (goal === 'tunnel' ? rand() < 0.15 : rand() < 0.03)) {
       const dx = horizontal ? (n.goalDir || (rand() < 0.5 ? -1 : 1)) : Math.floor(rand() * 3 - 1);
       const dy = horizontal ? 0 : (rand() < 0.5 ? 1 : -1);
       const tx = Math.floor(n.x + dx);
