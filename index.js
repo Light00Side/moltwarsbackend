@@ -542,6 +542,21 @@ function tickAnimals() {
     animals.delete(first);
   }
 
+  // random respawn if below cap
+  if (animals.size < 50 && rand() < 0.05) {
+    const x = Math.floor(rand() * WORLD_W);
+    const y = Math.max(1, (surfaceMap[x] || Math.floor(WORLD_H * 0.25)) - 1);
+    animals.set(randomUUID(), {
+      id: randomUUID(),
+      type: 'boar',
+      x,
+      y,
+      hp: 20,
+      vx: 0,
+      vy: 0,
+    });
+  }
+
   for (const a of animals.values()) {
     if (avoidVoid(a) || keepAboveGround(a)) {
       a.vx = Math.floor(rand() * 3) - 1;
