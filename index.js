@@ -147,6 +147,7 @@ const animals = new Map(); // id -> {id, type, x, y, hp, vx, vy}
 const npcs = new Map(); // id -> {id, name, x, y, hp, inv, vx, vy}
 const chatLog = []; // {ts, message}
 const CHAT_MAX = 200;
+const INACTIVE_TIMEOUT_MS = 30 * 1000;
 
 const NPC_CHAT = [
   'Want to trade food for ore?',
@@ -406,6 +407,7 @@ function spawnPlayer(name) {
     inv: {},
     active: null,
     lastAttack: 0,
+    lastSeen: Date.now(),
     stats: {
       kills: 0,
       deaths: 0,
@@ -422,6 +424,10 @@ function spawnPlayer(name) {
 function addChat(message) {
   chatLog.push({ ts: Date.now(), message });
   if (chatLog.length > CHAT_MAX) chatLog.shift();
+}
+
+function isActivePlayer(p) {
+  return p?.lastSeen && Date.now() - p.lastSeen < INACTIVE_TIMEOUT_MS;
 }
 
 function broadcast(payload) {
@@ -660,7 +666,7 @@ function getWorldSnapshot() {
     worldHeight: WORLD_H,
     worldSize: WORLD_W,
     tiles: Array.from(world),
-    players: Array.from(players.values()).map(({ apiKey, ...rest }) => rest),
+    players: Array.from(players.values()).filter(isActivePlayer).map(({ apiKey, ...rest }) => rest),
     animals: Array.from(animals.values()),
     npcs: Array.from(npcs.values()),
     villages,
@@ -735,6 +741,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('message', (msg) => {
     try {
+      p.lastSeen = Date.now();
       const data = JSON.parse(msg.toString());
       if (data.type === 'move') {
         const dx = Math.max(-1, Math.min(1, data.dx || 0));
@@ -910,6 +917,7 @@ setInterval(() => {
     if (ws.readyState !== 1) continue;
     const p = players.get(playerId);
     if (!p) continue;
+    p.lastSeen = Date.now();
     applyGravity(p);
     if (p.stats) {
       const now = Date.now();
@@ -918,6 +926,7 @@ setInterval(() => {
       p.stats.lastTick = now;
     }
     const nearbyPlayers = Array.from(players.values())
+      .filter(isActivePlayer)
       .filter(o => Math.abs(o.x - p.x) <= VIEW_RADIUS && Math.abs(o.y - p.y) <= VIEW_RADIUS)
       .map(({ apiKey, ...rest }) => rest);
 
@@ -951,7 +960,7 @@ setInterval(() => {
       worldHeight: WORLD_H,
       x, y, w, h,
       tiles: getRectTiles(x, y, w, h),
-      players: Array.from(players.values()).map(({ apiKey, ...rest }) => rest),
+      players: Array.from(players.values()).filter(isActivePlayer).map(({ apiKey, ...rest }) => rest),
       animals: Array.from(animals.values()),
       npcs: Array.from(npcs.values()),
       chat: chatLog,
