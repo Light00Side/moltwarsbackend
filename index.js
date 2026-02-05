@@ -500,6 +500,17 @@ function applyGravity(entity) {
   }
 }
 
+function liftFromVoid(entity) {
+  if (entity.y < WORLD_H - 3) return;
+  const x = Math.floor(entity.x);
+  for (let yy = Math.floor(entity.y); yy >= 1; yy--) {
+    if (isSolid(getTile(x, yy))) {
+      entity.y = Math.max(0, yy - 1);
+      return;
+    }
+  }
+}
+
 function tryMove(entity, dx, dy) {
   const nx = Math.max(0, Math.min(WORLD_W - 1, entity.x + dx));
   const ny = Math.max(0, Math.min(WORLD_H - 1, entity.y + dy));
@@ -512,6 +523,7 @@ function tryMove(entity, dx, dy) {
 
 function tickAnimals() {
   for (const a of animals.values()) {
+    liftFromVoid(a);
     // random wander (horizontal mostly)
     if (rand() < 0.3) {
       a.vx = Math.floor(rand() * 3) - 1;
@@ -524,6 +536,7 @@ function tickAnimals() {
 
 function tickNpcs() {
   for (const n of npcs.values()) {
+    liftFromVoid(n);
     // Always pick a direction
     n.vx = Math.floor(rand() * 3) - 1;
     n.vy = 0;
