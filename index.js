@@ -611,7 +611,7 @@ function tickNpcs() {
   }
 
   for (const n of npcs.values()) {
-    if (avoidVoid(n)) {
+    if (avoidVoid(n) || keepAboveGround(n)) {
       n.vx = 0;
       n.vy = -1;
       tryMove(n, 0, -1);
