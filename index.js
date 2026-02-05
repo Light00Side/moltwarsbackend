@@ -310,7 +310,7 @@ const NPC_NAMES = [
 
 function genNpcs() {
   npcs.clear();
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 30; i++) {
     const id = randomUUID();
     const base = NPC_NAMES[i % NPC_NAMES.length];
     const suffix = rand() < 0.4 ? `-${Math.floor(rand() * 90 + 10)}` : '';
@@ -327,6 +327,7 @@ function genNpcs() {
       goal: null,
       goalUntil: 0,
       goalDir: 0,
+      goalStage: 0,
       stats: { blocksMined: 0, itemsCrafted: 0, playtimeMs: 0 },
     });
   }
@@ -607,7 +608,11 @@ function assignNpcGoal(n) {
   const surface = surfaceMap[x] || Math.floor(WORLD_H * 0.25);
   let goal = 'wander';
   const r = rand();
-  if (n.y < surface + 2) goal = 'tunnel';
+  if (isBelowDirt(n.x, n.y)) {
+    const stage = (n.goalStage || 0) % 3; // 0 shaft,1 diag,2 shaft
+    goal = stage == 1 ? 'diag' : 'shaft';
+    n.goalStage = (stage + 1) % 3;
+  } else if (n.y < surface + 2) goal = 'shaft';
   else if (r < 0.6) goal = 'tunnel';
   else if (r < 0.85) goal = 'wander';
   else goal = 'build';
@@ -618,14 +623,14 @@ function assignNpcGoal(n) {
 
 function tickNpcs() {
   // cap NPCs
-  while (npcs.size > 40) {
+  while (npcs.size > 30) {
     const first = npcs.keys().next().value;
     if (!first) break;
     npcs.delete(first);
   }
 
   // respawn if below cap
-  if (npcs.size < 40 && rand() < 0.08) {
+  if (npcs.size < 30 && rand() < 0.08) {
     const id = randomUUID();
     const base = NPC_NAMES[Math.floor(rand() * NPC_NAMES.length)];
     const suffix = rand() < 0.4 ? `-${Math.floor(rand() * 90 + 10)}` : '';
@@ -642,6 +647,7 @@ function tickNpcs() {
       goal: null,
       goalUntil: 0,
       goalDir: 0,
+      goalStage: 0,
       stats: { blocksMined: 0, itemsCrafted: 0, playtimeMs: 0 },
     });
   }
@@ -658,6 +664,8 @@ function tickNpcs() {
 
     const goal = n.goal || 'wander';
     const horizontal = goal === 'tunnel';
+    const isDiag = goal === 'diag';
+    const isShaft = goal === 'shaft';
 
     const x = Math.max(0, Math.min(WORLD_W - 1, Math.floor(n.x)));
     const surface = surfaceMap[x] || Math.floor(WORLD_H * 0.25);
@@ -676,7 +684,25 @@ function tickNpcs() {
       }
     }
 
-    if (goal === 'surface') {
+    if (goal === 'shaft') {
+      n.vx = 0;
+      // move/mine downward
+      const tx = Math.floor(n.x);
+      const ty = Math.floor(n.y + 1);
+      const t = getTile(tx, ty);
+      if (t !== TILE.AIR && t !== TILE.SKY) {
+        setTile(tx, ty, TILE.AIR);
+        const item = t === TILE.TREE ? ITEM.WOOD : t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+        n.inv[item] = (n.inv[item] || 0) + 1;
+        if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+      } else {
+        tryMove(n, 0, 1);
+      }
+    } else if (goal === 'diag') {
+      const dir = n.goalDir || (rand() < 0.5 ? -1 : 1);
+      n.vx = dir;
+      tryMove(n, dir * 0.7, 0.7);
+    } else if (goal === 'surface') {
       if (keepAboveGround(n)) {
         n.vx = 0;
         n.vy = -1;
@@ -728,15 +754,14 @@ function tickNpcs() {
       if (horizontal) {
         dx = n.goalDir || (rand() < 0.5 ? -1 : 1);
         dy = 0;
+      } else if (isShaft) {
+        dx = 0; dy = 1;
+      } else if (isDiag) {
+        dx = n.goalDir || (rand() < 0.5 ? -1 : 1);
+        dy = 1;
       } else {
-        // mineshafts/diagonal once below dirt
-        if (isBelowDirt(n.x, n.y) && rand() < 0.85) {
-          dx = n.goalDir || (rand() < 0.5 ? -1 : 1);
-          dy = 1;
-        } else {
-          dx = Math.floor(rand() * 3 - 1);
-          dy = rand() < 0.5 ? 1 : -1;
-        }
+        dx = Math.floor(rand() * 3 - 1);
+        dy = rand() < 0.5 ? 1 : -1;
       }
       const tx = Math.floor(n.x + dx);
       const ty = Math.floor(n.y + dy);
