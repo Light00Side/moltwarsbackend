@@ -276,12 +276,14 @@ function genVillages() {
 
 function genAnimals() {
   animals.clear();
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 50; i++) {
+    const x = Math.floor(rand() * WORLD_W);
+    const y = Math.max(1, (surfaceMap[x] || Math.floor(WORLD_H * 0.25)) - 1);
     animals.set(randomUUID(), {
       id: randomUUID(),
       type: 'boar',
-      x: Math.floor(rand() * WORLD_W),
-      y: Math.floor(WORLD_H * 0.25 + rand() * WORLD_H * 0.5),
+      x,
+      y,
       hp: 20,
       vx: 0,
       vy: 0,
@@ -512,6 +514,16 @@ function avoidVoid(entity) {
   return false;
 }
 
+function keepAboveGround(entity) {
+  const x = Math.max(0, Math.min(WORLD_W - 1, Math.floor(entity.x)));
+  const surface = surfaceMap[x] || Math.floor(WORLD_H * 0.25);
+  if (entity.y > surface - 1) {
+    tryMove(entity, 0, -1);
+    return true;
+  }
+  return false;
+}
+
 function tryMove(entity, dx, dy) {
   const nx = Math.max(0, Math.min(WORLD_W - 1, entity.x + dx));
   const ny = Math.max(0, Math.min(WORLD_H - 1, entity.y + dy));
@@ -523,8 +535,15 @@ function tryMove(entity, dx, dy) {
 }
 
 function tickAnimals() {
+  // cap animals
+  while (animals.size > 50) {
+    const first = animals.keys().next().value;
+    if (!first) break;
+    animals.delete(first);
+  }
+
   for (const a of animals.values()) {
-    if (avoidVoid(a)) {
+    if (avoidVoid(a) || keepAboveGround(a)) {
       a.vx = Math.floor(rand() * 3) - 1;
     }
     // random wander (horizontal mostly)
