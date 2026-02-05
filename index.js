@@ -455,6 +455,10 @@ function broadcastWorld(payload) {
   }
 }
 
+function emitFx(payload) {
+  broadcastWorld({ type: "fx", ...payload, ts: Date.now() });
+}
+
 function getViewport(p) {
   const tiles = [];
   for (let dy = -VIEW_RADIUS; dy <= VIEW_RADIUS; dy++) {
@@ -839,6 +843,7 @@ function tickNpcs() {
         setTile(tx, ty, buildTile);
         n.inv[item] -= 1;
         if (n.stats) n.stats.itemsCrafted = (n.stats.itemsCrafted || 0) + 1;
+        emitFx({ kind: 'build', x: tx, y: ty });
       }
     }
   }
@@ -977,6 +982,7 @@ wss.on('connection', (ws, req) => {
 
         const t = players.get(data.targetId);
         if (t) {
+          emitFx({ kind: 'attack', x1: p.x, y1: p.y, x2: t.x, y2: t.y });
           t.hp = Math.max(0, t.hp - dmg);
           if (t.hp === 0) {
             if (p.stats) p.stats.kills += 1;
@@ -1002,6 +1008,7 @@ wss.on('connection', (ws, req) => {
       if (data.type === 'attackAnimal' && data.animalId) {
         const a = animals.get(data.animalId);
         if (a) {
+          emitFx({ kind: 'attack', x1: p.x, y1: p.y, x2: a.x, y2: a.y });
           a.hp -= 5;
           // run away
           a.vx = Math.sign(a.x - p.x) * 2;
@@ -1016,6 +1023,7 @@ wss.on('connection', (ws, req) => {
         if ((p.inv[ITEM.MEAT] || 0) > 0) {
           p.inv[ITEM.MEAT] -= 1;
           p.hp = Math.min(100, p.hp + 20);
+          emitFx({ kind: 'eat', x: p.x, y: p.y });
         }
       }
       if (data.type === 'mine') {
