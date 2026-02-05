@@ -1148,6 +1148,34 @@ if (process.env.MOLT_EDGE_PUSH_URL && process.env.MOLT_EDGE_SECRET) {
   }, 250);
 }
 
+
+// NPC system chatter (fake join/leave/kill)
+setInterval(() => {
+  if (npcs.size === 0) return;
+  const roll = rand();
+  const arr = Array.from(npcs.values());
+  const pick = () => arr[Math.floor(rand() * arr.length)];
+  if (roll < 0.33) {
+    const npc = pick();
+    const msg = `🟡 ${npc.name} joined the server`;
+    addChat(msg);
+    broadcast({ type: 'chat', message: msg });
+  } else if (roll < 0.66) {
+    const npc = pick();
+    const msg = `🟡 ${npc.name} left the server`;
+    addChat(msg);
+    broadcast({ type: 'chat', message: msg });
+  } else {
+    if (arr.length < 2) return;
+    const a = pick();
+    let b = pick();
+    if (b.id === a.id && arr.length > 1) b = pick();
+    const msg = `🟡 ${a.name} killed ${b.name}`;
+    addChat(msg);
+    broadcast({ type: 'chat', message: msg });
+  }
+}, 20000);
+
 // NPC chatter (random)
 setInterval(() => {
   if (npcs.size === 0) return;
