@@ -307,7 +307,7 @@ function genNpcs() {
     'Iris',
     'Vex',
   ];
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 40; i++) {
     const id = randomUUID();
     const base = names[i % names.length];
     const suffix = rand() < 0.4 ? `-${Math.floor(rand() * 90 + 10)}` : '';
@@ -578,7 +578,7 @@ function tickAnimals() {
 
 function tickNpcs() {
   // cap NPCs
-  while (npcs.size > 15) {
+  while (npcs.size > 40) {
     const first = npcs.keys().next().value;
     if (!first) break;
     npcs.delete(first);
