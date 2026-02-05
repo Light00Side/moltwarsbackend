@@ -693,11 +693,11 @@ function tickNpcs() {
         }
       } else {
         n.vx = n.goalDir || (rand() < 0.5 ? -1 : 1);
-        tryMove(n, n.vx * 1.0, 0);
+        tryMove(n, n.vx * 0.7, 0);
       }
     } else if (goal === 'tunnel') {
       n.vx = n.goalDir || (rand() < 0.5 ? -1 : 1);
-      tryMove(n, n.vx * 1.2, 0);
+      tryMove(n, n.vx * 0.9, 0);
     } else if (goal === 'build') {
       if (rand() < 0.5) n.vx = n.goalDir || (rand() < 0.5 ? -1 : 1);
       tryMove(n, n.vx * 0.4, 0);
@@ -730,7 +730,7 @@ function tickNpcs() {
         dy = 0;
       } else {
         // mineshafts/diagonal once below dirt
-        if (isBelowDirt(n.x, n.y) && rand() < 0.6) {
+        if (isBelowDirt(n.x, n.y) && rand() < 0.85) {
           dx = n.goalDir || (rand() < 0.5 ? -1 : 1);
           dy = 1;
         } else {
@@ -749,7 +749,7 @@ function tickNpcs() {
     }
 
     // Build if goal is build (or sometimes)
-    if (goal === 'build' ? rand() < 0.25 : rand() < 0.08) {
+    if (goal === 'build' ? rand() < 0.12 : rand() < 0.04) {
       const buildTile = [TILE.DIRT, TILE.STONE, TILE.TREE][Math.floor(rand() * 3)];
       const map = {
         [TILE.DIRT]: ITEM.DIRT,
