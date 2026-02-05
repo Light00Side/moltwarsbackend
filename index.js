@@ -146,7 +146,7 @@ const chests = new Map(); // key "x,y" -> {items:{[item]:count}}
 const animals = new Map(); // id -> {id, type, x, y, hp, vx, vy}
 const npcs = new Map(); // id -> {id, name, x, y, hp, inv, vx, vy}
 const chatLog = []; // {ts, message}
-const CHAT_MAX = 50;
+const CHAT_MAX = 200;
 
 const NPC_CHAT = [
   'Want to trade food for ore?',
@@ -350,6 +350,10 @@ function loadWorld() {
       if (data?.npcs) {
         for (const n of data.npcs) npcs.set(n.id, n);
       }
+      if (data?.chat) {
+        chatLog.length = 0;
+        for (const c of data.chat) chatLog.push(c);
+      }
     } else {
       setSeed(envSeed);
       genWorld();
@@ -370,6 +374,7 @@ function saveWorld() {
       chests: Object.fromEntries(chests),
       animals: Array.from(animals.values()),
       npcs: Array.from(npcs.values()),
+      chat: chatLog,
     };
     fs.mkdirSync('./data', { recursive: true });
     fs.writeFileSync(SAVE_PATH, JSON.stringify(snapshot));
