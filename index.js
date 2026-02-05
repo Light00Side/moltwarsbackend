@@ -716,6 +716,21 @@ function tickNpcs() {
         if (t !== TILE.AIR && t !== TILE.SKY) {
           setTile(tx, ty, TILE.AIR);
           const item = t === TILE.TREE ? ITEM.WOOD : t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+        // vein mining: clear nearby ore
+        if (t === TILE.ORE) {
+          for (let ox = -1; ox <= 1; ox++) {
+            for (let oy = -1; oy <= 1; oy++) {
+              if (ox === 0 && oy === 0) continue;
+              const vx = tx + ox;
+              const vy = ty + oy;
+              if (getTile(vx, vy) === TILE.ORE) {
+                setTile(vx, vy, TILE.AIR);
+                n.inv[ITEM.ORE] = (n.inv[ITEM.ORE] || 0) + 1;
+                if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+              }
+            }
+          }
+        }
           n.inv[item] = (n.inv[item] || 0) + 1;
           if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
         } else {
@@ -745,9 +760,24 @@ function tickNpcs() {
       const tx = Math.floor(n.x + dx);
       const ty = Math.floor(n.y);
       const t = getTile(tx, ty);
-      if (t !== TILE.AIR && t !== TILE.SKY && rand() < 0.16) {
+      if (t !== TILE.AIR && t !== TILE.SKY && rand() < 0.25) {
         setTile(tx, ty, TILE.AIR);
         const item = t === TILE.TREE ? ITEM.WOOD : t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+        // vein mining: clear nearby ore
+        if (t === TILE.ORE) {
+          for (let ox = -1; ox <= 1; ox++) {
+            for (let oy = -1; oy <= 1; oy++) {
+              if (ox === 0 && oy === 0) continue;
+              const vx = tx + ox;
+              const vy = ty + oy;
+              if (getTile(vx, vy) === TILE.ORE) {
+                setTile(vx, vy, TILE.AIR);
+                n.inv[ITEM.ORE] = (n.inv[ITEM.ORE] || 0) + 1;
+                if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+              }
+            }
+          }
+        }
         n.inv[item] = (n.inv[item] || 0) + 1;
         if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
       }
@@ -775,6 +805,21 @@ function tickNpcs() {
       if (t !== TILE.AIR && t !== TILE.SKY) {
         setTile(tx, ty, TILE.AIR);
         const item = t === TILE.TREE ? ITEM.WOOD : t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+        // vein mining: clear nearby ore
+        if (t === TILE.ORE) {
+          for (let ox = -1; ox <= 1; ox++) {
+            for (let oy = -1; oy <= 1; oy++) {
+              if (ox === 0 && oy === 0) continue;
+              const vx = tx + ox;
+              const vy = ty + oy;
+              if (getTile(vx, vy) === TILE.ORE) {
+                setTile(vx, vy, TILE.AIR);
+                n.inv[ITEM.ORE] = (n.inv[ITEM.ORE] || 0) + 1;
+                if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+              }
+            }
+          }
+        }
         n.inv[item] = (n.inv[item] || 0) + 1;
       }
     }
@@ -979,6 +1024,21 @@ wss.on('connection', (ws, req) => {
         if (t !== TILE.AIR && t !== TILE.SKY) {
           setTile(x, y, TILE.AIR);
           const item = t === TILE.TREE ? ITEM.WOOD : t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+        // vein mining: clear nearby ore
+        if (t === TILE.ORE) {
+          for (let ox = -1; ox <= 1; ox++) {
+            for (let oy = -1; oy <= 1; oy++) {
+              if (ox === 0 && oy === 0) continue;
+              const vx = tx + ox;
+              const vy = ty + oy;
+              if (getTile(vx, vy) === TILE.ORE) {
+                setTile(vx, vy, TILE.AIR);
+                n.inv[ITEM.ORE] = (n.inv[ITEM.ORE] || 0) + 1;
+                if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+              }
+            }
+          }
+        }
           p.inv[item] = (p.inv[item] || 0) + 1;
           if (p.stats) p.stats.blocksMined += 1;
         }
