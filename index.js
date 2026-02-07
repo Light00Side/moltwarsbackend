@@ -1369,12 +1369,12 @@ setInterval(() => {
   }
 }, 250);
 
-// Push snapshots to edge (optional)
+// Push snapshots to edge and receive queued agent actions
 if (process.env.MOLT_EDGE_PUSH_URL && process.env.MOLT_EDGE_SECRET) {
   setInterval(async () => {
     try {
       const payload = JSON.stringify(getWorldSnapshot());
-      await fetch(process.env.MOLT_EDGE_PUSH_URL, {
+      const resp = await fetch(process.env.MOLT_EDGE_PUSH_URL, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -1382,8 +1382,108 @@ if (process.env.MOLT_EDGE_PUSH_URL && process.env.MOLT_EDGE_SECRET) {
         },
         body: payload,
       });
+      // Process queued actions from DO
+      const result = await resp.json();
+      if (result.ok && Array.isArray(result.actions)) {
+        for (const act of result.actions) {
+          processAgentAction(act);
+        }
+      }
     } catch (e) {}
   }, 250);
+}
+
+// Process agent actions from DO queue
+function processAgentAction(act) {
+  try {
+    if (act.type === 'join') {
+      // Create new player
+      const { playerId, name, apiKey } = act;
+      if (players.has(playerId)) return;
+      const spawnX = Math.floor(rand() * WORLD_W);
+      const surface = surfaceMap[spawnX] || Math.floor(WORLD_H * 0.25);
+      players.set(playerId, {
+        id: playerId,
+        name,
+        apiKey,
+        x: spawnX,
+        y: Math.max(1, surface - 1),
+        hp: 100,
+        maxHp: 100,
+        inv: {},
+        vx: 0,
+        vy: 0,
+        look: 1,
+        lastSeen: Date.now(),
+        spawn: { x: spawnX, y: Math.max(1, surface - 1) },
+        stats: { kills: 0, deaths: 0, blocksMined: 0, itemsCrafted: 0, playtimeMs: 0 },
+      });
+      chatLog.push({ ts: Date.now(), message: `🟡 ${name} joined the game` });
+    } else if (act.type === 'action') {
+      const { playerId, action, params } = act;
+      const player = players.get(playerId);
+      if (!player) return;
+      player.lastSeen = Date.now();
+      
+      if (action === 'move') {
+        const dx = Math.max(-1, Math.min(1, params.dx || 0));
+        const dy = Math.max(-1, Math.min(1, params.dy || 0));
+        tryMove(player, dx * 0.5, dy * 0.5);
+        if (dx !== 0) player.look = dx > 0 ? 1 : 0;
+      } else if (action === 'mine') {
+        const tx = Math.floor(player.x + (params.dx || 0));
+        const ty = Math.floor(player.y + (params.dy || 0));
+        const t = getTile(tx, ty);
+        if (t !== TILE.AIR && t !== TILE.SKY) {
+          setTile(tx, ty, TILE.AIR);
+          const item = t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+          player.inv[item] = (player.inv[item] || 0) + 1;
+          if (player.stats) player.stats.blocksMined = (player.stats.blocksMined || 0) + 1;
+          emitFx({ kind: 'mine', x: tx, y: ty, actorId: playerId, actorType: 'player' });
+        }
+      } else if (action === 'build') {
+        const tx = Math.floor(player.x + (params.dx || 0));
+        const ty = Math.floor(player.y + (params.dy || 0));
+        const tile = params.tile || TILE.DIRT;
+        const itemMap = { [TILE.DIRT]: ITEM.DIRT, [TILE.STONE]: ITEM.STONE };
+        const item = itemMap[tile];
+        if (getTile(tx, ty) === TILE.AIR && item && (player.inv[item] || 0) > 0) {
+          setTile(tx, ty, tile);
+          player.inv[item] -= 1;
+          emitFx({ kind: 'build', x: tx, y: ty, actorId: playerId, actorType: 'player' });
+        }
+      } else if (action === 'attack') {
+        // Find nearby target
+        const range = 2;
+        for (const other of [...players.values(), ...npcs.values()]) {
+          if (other.id === playerId) continue;
+          const dx = Math.abs(other.x - player.x);
+          const dy = Math.abs(other.y - player.y);
+          if (dx <= range && dy <= range) {
+            const dmg = 10 + Math.floor(rand() * 10);
+            if (other.hp !== undefined) {
+              other.hp = Math.max(0, other.hp - dmg);
+              emitFx({ kind: 'attack', x1: player.x, y1: player.y, x2: other.x, y2: other.y, actorId: playerId, actorType: 'player' });
+              if (other.hp <= 0 && npcs.has(other.id)) {
+                damageNpc(other, 999, playerId);
+              }
+            }
+            break;
+          }
+        }
+      } else if (action === 'chat') {
+        const msg = String(params.message || '').slice(0, 200);
+        if (msg) {
+          chatLog.push({ ts: Date.now(), message: `${player.name}: ${msg}` });
+        }
+      } else if (action === 'leave') {
+        players.delete(playerId);
+        chatLog.push({ ts: Date.now(), message: `🔴 ${player.name} left the game` });
+      }
+    }
+  } catch (e) {
+    console.error('[agent action error]', e);
+  }
 }
 
 
