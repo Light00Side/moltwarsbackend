@@ -203,6 +203,7 @@ function setTile(x, y, t) {
 }
 
 function genWorld() {
+  chests.clear();
   // noise-based heightmap (higher roughness)
   const minSurface = Math.floor(WORLD_H * 0.10);
   const maxSurface = Math.floor(WORLD_H * 0.35);
@@ -261,10 +262,45 @@ function genWorld() {
     }
   }
 
+  genRuins();
   genVillages();
   genAnimals();
   genNpcs();
 }
+
+function genRuins() {
+  const ruins = 8;
+  for (let i = 0; i < ruins; i++) {
+    const x = Math.floor(rand() * (WORLD_W - 20)) + 10;
+    const surface = surfaceMap[x] || Math.floor(WORLD_H * 0.25);
+    const y = Math.floor(surface + 20 + rand() * (WORLD_H - surface - 40));
+    const w = 6 + Math.floor(rand() * 5);
+    const h = 4 + Math.floor(rand() * 3);
+    // carve room
+    for (let yy = 0; yy < h; yy++) {
+      for (let xx = 0; xx < w; xx++) {
+        const tx = x + xx;
+        const ty = y + yy;
+        if (tx < 1 || ty < 1 || tx >= WORLD_W - 1 || ty >= WORLD_H - 1) continue;
+        setTile(tx, ty, TILE.AIR);
+      }
+    }
+    // add a few wooden beams
+    setTile(x, y, TILE.TREE);
+    setTile(x + w - 1, y, TILE.TREE);
+    // place chest at center
+    const cx = Math.floor(x + w / 2);
+    const cy = Math.floor(y + h / 2);
+    const key = `${cx},${cy}`;
+    chests.set(key, { items: {
+      [ITEM.ORE]: 3 + Math.floor(rand() * 6),
+      [ITEM.STONE]: 5 + Math.floor(rand() * 10),
+      [ITEM.WOOD]: 2 + Math.floor(rand() * 6),
+      [ITEM.MEAT]: rand() < 0.4 ? 1 + Math.floor(rand() * 3) : 0,
+    }});
+  }
+}
+
 
 function genVillages() {
   villages = [];
@@ -306,6 +342,31 @@ const NPC_NAMES = [
   'Prowl', 'Quill', 'Rook', 'Scourge', 'Talon',
 ];
 
+function buildNpcShelter(n) {
+  const x0 = Math.floor(n.x);
+  const y0 = Math.floor(n.y);
+  const w = 5 + Math.floor(rand() * 3);
+  const h = 3 + Math.floor(rand() * 2);
+  // build small hut around current position
+  for (let y = 0; y <= h; y++) {
+    for (let x = 0; x <= w; x++) {
+      const tx = x0 + x;
+      const ty = y0 - y;
+      if (tx < 1 || ty < 1 || tx >= WORLD_W - 1 || ty >= WORLD_H - 1) continue;
+      const isEdge = (x === 0 || x === w || y === h);
+      if (isEdge) {
+        setTile(tx, ty, TILE.TREE);
+        if (n.inv[ITEM.WOOD]) n.inv[ITEM.WOOD] = Math.max(0, n.inv[ITEM.WOOD] - 1);
+      } else {
+        setTile(tx, ty, TILE.AIR);
+      }
+    }
+  }
+  // door opening
+  setTile(x0 + Math.floor(w/2), y0, TILE.AIR);
+  emitFx({ kind: 'build', x: x0, y: y0, actorId: n.id, actorType: 'npc' });
+}
+
 function genNpcs() {
   npcs.clear();
   for (let i = 0; i < 30; i++) {
@@ -325,6 +386,7 @@ function genNpcs() {
       goalUntil: 0,
       goalDir: 0,
       goalStage: 0,
+      hasHut: false,
       roamX: Math.floor(rand() * WORLD_W),
       stats: { blocksMined: 0, itemsCrafted: 0, playtimeMs: 0 },
     });
@@ -691,6 +753,7 @@ function respawnNpc(n) {
   n.hp = n.maxHp || 100;
   n.state = 'idle';
   n.goal = 'findSpot';
+  n.hasHut = false;
   n.goalUntil = Date.now() + 5000;
   chatLog.push({ ts: Date.now(), message: `🟡 ${n.name} respawned` });
 }
@@ -733,6 +796,7 @@ function tickNpcs() {
       goalUntil: 0,
       goalDir: 0,
       goalStage: 0,
+      hasHut: false,
       roamX: Math.floor(rand() * WORLD_W),
       stats: { blocksMined: 0, itemsCrafted: 0, playtimeMs: 0 },
     });
@@ -802,6 +866,12 @@ function tickNpcs() {
     // Bounce off world edges
     if (n.x < 5) { n.goalDir = 1; n.x = 5; }
     if (n.x > WORLD_W - 5) { n.goalDir = -1; n.x = WORLD_W - 5; }
+
+    // ensure each NPC builds a hut once
+    if (!n.hasHut && !isBelowDirt(n.x, n.y)) {
+      buildNpcShelter(n);
+      n.hasHut = true;
+    }
 
     const goal = n.goal || 'wander';
     const dir = n.goalDir || 1;
@@ -988,7 +1058,7 @@ function tickNpcs() {
     }
 
     // Build if goal is build (or sometimes)
-    if (goal === 'build' ? rand() < 0.04 : rand() < 0.008) {
+    if (goal === 'build' ? rand() < 0.04 : rand() < 0.004) {
       const buildTile = [TILE.DIRT, TILE.STONE, TILE.TREE][Math.floor(rand() * 3)];
       const map = {
         [TILE.DIRT]: ITEM.DIRT,
