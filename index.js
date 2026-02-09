@@ -345,28 +345,44 @@ const NPC_NAMES = [
 ];
 
 function buildNpcShelter(n) {
+  if (n.buildingHut || n.hasHut) return;
+  n.buildingHut = true;
+  chatLog.push({ ts: Date.now(), message: `🟡 ${n.name} is building a shelter` });
+
   const x0 = Math.floor(n.x);
   const y0 = Math.floor(n.y);
   const w = 5 + Math.floor(rand() * 3);
   const h = 3 + Math.floor(rand() * 2);
-  // build small hut around current position
+
+  const placements = [];
   for (let y = 0; y <= h; y++) {
     for (let x = 0; x <= w; x++) {
       const tx = x0 + x;
       const ty = y0 - y;
       if (tx < 1 || ty < 1 || tx >= WORLD_W - 1 || ty >= WORLD_H - 1) continue;
       const isEdge = (x === 0 || x === w || y === h);
-      if (isEdge) {
-        setTile(tx, ty, TILE.TREE);
-        if (n.inv[ITEM.WOOD]) n.inv[ITEM.WOOD] = Math.max(0, n.inv[ITEM.WOOD] - 1);
-      } else {
-        setTile(tx, ty, TILE.AIR);
-      }
+      if (isEdge) placements.push({ tx, ty, tile: TILE.TREE });
+      else placements.push({ tx, ty, tile: TILE.AIR });
     }
   }
-  // door opening
-  setTile(x0 + Math.floor(w/2), y0, TILE.AIR);
-  emitFx({ kind: 'build', x: x0, y: y0, actorId: n.id, actorType: 'npc' });
+
+  const doorX = x0 + Math.floor(w / 2);
+
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= placements.length) {
+      setTile(doorX, y0, TILE.AIR);
+      emitFx({ kind: 'build', x: x0, y: y0, actorId: n.id, actorType: 'npc' });
+      n.hasHut = true;
+      n.buildingHut = false;
+      clearInterval(interval);
+      return;
+    }
+    const { tx, ty, tile } = placements[i++];
+    setTile(tx, ty, tile);
+    if (tile === TILE.TREE && n.inv[ITEM.WOOD]) n.inv[ITEM.WOOD] = Math.max(0, n.inv[ITEM.WOOD] - 1);
+    emitFx({ kind: 'build', x: tx, y: ty, actorId: n.id, actorType: 'npc' });
+  }, 80);
 }
 
 function genNpcs() {
