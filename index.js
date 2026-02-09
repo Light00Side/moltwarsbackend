@@ -559,7 +559,15 @@ function broadcastWorld(payload) {
 
 function emitFx(payload) {
   broadcastWorld({ type: "fx", ...payload, ts: Date.now() });
-  if (payload.actorId) broadcastWorld({ type: "mineState", actorId: payload.actorId, active: payload.kind === "mine" });
+  if (payload.actorId) {
+    broadcastWorld({ type: "mineState", actorId: payload.actorId, active: payload.kind === "mine" });
+    if (payload.kind === "mine") {
+      const p = players.get(payload.actorId);
+      if (p) p.miningUntil = Date.now() + 600;
+      const n = npcs.get(payload.actorId);
+      if (n) n.miningUntil = Date.now() + 600;
+    }
+  }
 }
 
 function getViewport(p) {
