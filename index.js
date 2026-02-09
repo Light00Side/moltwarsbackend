@@ -317,11 +317,12 @@ function genAnimals() {
   for (let i = 0; i < 50; i++) {
     const x = Math.floor(rand() * WORLD_W);
     const y = Math.max(1, (surfaceMap[x] || Math.floor(WORLD_H * 0.25)) - 1);
+    const pos = safeSpawn(x, y);
     animals.set(randomUUID(), {
       id: randomUUID(),
       type: 'boar',
-      x,
-      y,
+      x: pos.x,
+      y: pos.y,
       hp: 20,
       vx: 0,
       vy: 0,
@@ -372,11 +373,15 @@ function genNpcs() {
   for (let i = 0; i < 30; i++) {
     const id = randomUUID();
     const base = NPC_NAMES[i % NPC_NAMES.length];
+    const nx = Math.floor(rand() * WORLD_W);
+    const ny = Math.floor(WORLD_H * 0.45 + rand() * WORLD_H * 0.5);
+    setTile(nx, ny, TILE.AIR);
+    setTile(nx, Math.max(0, ny - 1), TILE.AIR);
     npcs.set(id, {
       id,
       name: base,
-      x: Math.floor(rand() * WORLD_W),
-      y: Math.floor(WORLD_H * 0.45 + rand() * WORLD_H * 0.5),
+      x: nx,
+      y: ny,
       hp: 100,
       inv: {},
       vx: 0,
@@ -462,15 +467,36 @@ function findSurfaceY(x) {
   return Math.floor(WORLD_H * 0.2);
 }
 
+function safeSpawn(x, y) {
+  let sx = Math.max(1, Math.min(WORLD_W - 2, x));
+  let sy = Math.max(1, Math.min(WORLD_H - 2, y));
+  for (let r = 0; r < 6; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const tx = sx + dx;
+        const ty = sy + dy;
+        if (tx < 1 || ty < 1 || tx >= WORLD_W - 1 || ty >= WORLD_H - 1) continue;
+        if (!isSolid(getTile(tx, ty)) && !isSolid(getTile(tx, ty - 1))) {
+          return { x: tx, y: ty };
+        }
+      }
+    }
+  }
+  setTile(sx, sy, TILE.AIR);
+  setTile(sx, Math.max(0, sy - 1), TILE.AIR);
+  return { x: sx, y: sy };
+}
+
 function spawnPlayer(name) {
   const spawnX = Math.floor(rand() * WORLD_W);
   const surfaceY = findSurfaceY(spawnX);
   const spawnY = Math.min(WORLD_H - 2, surfaceY + 5);
+  const pos = safeSpawn(spawnX, spawnY);
   return {
     id: randomUUID(),
     name,
-    x: spawnX,
-    y: spawnY,
+    x: pos.x,
+    y: pos.y,
     hp: 100,
     apiKey: randomUUID().replace(/-/g, ''),
     inv: {},
@@ -580,6 +606,8 @@ function nearbyNpcs(p) {
 }
 
 function applyGravity(entity) {
+  return;
+
   const x = Math.floor(entity.x);
   const y = Math.floor(entity.y);
   const below = getTile(x, y + 1);
@@ -621,11 +649,29 @@ function keepAboveGround(entity) {
   return false;
 }
 
+function isOccupied(exceptId, x, y) {
+  const fx = Math.floor(x);
+  const fy = Math.floor(y);
+  for (const p of players.values()) {
+    if (p.id === exceptId) continue;
+    if (Math.floor(p.x) === fx && Math.floor(p.y) === fy) return true;
+  }
+  for (const n of npcs.values()) {
+    if (n.id === exceptId) continue;
+    if (Math.floor(n.x) === fx && Math.floor(n.y) === fy) return true;
+  }
+  for (const a of animals.values()) {
+    if (a.id === exceptId) continue;
+    if (Math.floor(a.x) === fx && Math.floor(a.y) === fy) return true;
+  }
+  return false;
+}
+
 function tryMove(entity, dx, dy) {
   const nx = Math.max(0, Math.min(WORLD_W - 1, entity.x + dx));
   const ny = Math.max(0, Math.min(WORLD_H - 1, entity.y + dy));
   const t = getTile(Math.floor(nx), Math.floor(ny));
-  if (!isSolid(t)) {
+  if (!isSolid(t) && !isOccupied(entity.id, nx, ny)) {
     entity.x = nx;
     entity.y = ny;
   }
@@ -646,8 +692,8 @@ function tickAnimals() {
     animals.set(randomUUID(), {
       id: randomUUID(),
       type: 'boar',
-      x,
-      y,
+      x: pos.x,
+      y: pos.y,
       hp: 20,
       vx: 0,
       vy: 0,
@@ -740,7 +786,7 @@ function damageNpc(n, amount, attackerId) {
       attacker.stats.kills = (attacker.stats.kills || 0) + 1;
     }
     chatLog.push({ ts: Date.now(), message: `🟡 ${n.name} was slain` });
-    emitFx({ kind: 'death', x: n.x, y: n.y, actorId: n.id, actorType: 'npc' });
+    emitFx({ kind: 'explode', x: n.x, y: n.y, actorId: n.id, actorType: 'npc' });
   }
 }
 
@@ -806,6 +852,27 @@ function tickNpcs() {
     if (n.stats) n.stats.playtimeMs = (n.stats.playtimeMs || 0) + 100;
     
     const now = Date.now();
+    // stuck detection
+    if (n.lastX == null) { n.lastX = n.x; n.lastY = n.y; n.stuckTicks = 0; }
+    const moved = Math.abs(n.x - n.lastX) + Math.abs(n.y - n.lastY);
+    if (moved < 0.01) n.stuckTicks = (n.stuckTicks || 0) + 1; else { n.stuckTicks = 0; n.lastX = n.x; n.lastY = n.y; }
+    if (n.stuckTicks > 10) {
+      const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+      for (const [dx,dy] of dirs) {
+        const tx = Math.floor(n.x + dx);
+        const ty = Math.floor(n.y + dy);
+        const t = getTile(tx, ty);
+        if (t !== TILE.AIR && t !== TILE.SKY) {
+          setTile(tx, ty, TILE.AIR);
+          const item = t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+          n.inv[item] = (n.inv[item] || 0) + 1;
+          if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+          emitFx({ kind: 'mine', x: tx, y: ty, actorId: n.id, actorType: 'npc' });
+          break;
+        }
+      }
+      n.stuckTicks = 0;
+    }
     
     // Handle dead NPCs
     if (n.state === 'dead') {
@@ -838,18 +905,60 @@ function tickNpcs() {
       }
     }
     
-    // Combat check - fight nearby NPCs (50% chance per tick)
-    if (rand() < 0.5) {
+    // Chase enemies within 10 blocks
+    const nearby = findNearbyEnemy(n, 10);
+    if (nearby) {
+      const dirX = nearby.x > n.x ? 1 : -1;
+      const dirY = nearby.y > n.y ? 1 : -1;
+      n.goalDir = dirX;
+      // if blocked horizontally, mine toward enemy
+      const tx = Math.floor(n.x + dirX);
+      const ty = Math.floor(n.y);
+      const t = getTile(tx, ty);
+      if (t !== TILE.AIR && t !== TILE.SKY && rand() < 0.6) {
+        setTile(tx, ty, TILE.AIR);
+        const item = t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+        n.inv[item] = (n.inv[item] || 0) + 1;
+        if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+        emitFx({ kind: 'mine', x: tx, y: ty, actorId: n.id, actorType: 'npc' });
+      } else {
+        // vertical mining if target above/below
+        if (Math.abs(nearby.y - n.y) >= 1) {
+          const vtx = Math.floor(n.x);
+          const vty = Math.floor(n.y + dirY);
+          const vt = getTile(vtx, vty);
+          if (vt !== TILE.AIR && vt !== TILE.SKY && rand() < 0.5) {
+            setTile(vtx, vty, TILE.AIR);
+            const itemV = vt === TILE.ORE ? ITEM.ORE : vt === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+            n.inv[itemV] = (n.inv[itemV] || 0) + 1;
+            if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+            emitFx({ kind: 'mine', x: vtx, y: vty, actorId: n.id, actorType: 'npc' });
+          }
+        }
+        tryMove(n, dirX * 0.2, dirY * 0.15);
+      }
+    }
+
+    // Combat check - fight nearby NPCs (80% chance per tick)
+    if (rand() < 0.8) {
       const enemy = findNearbyEnemy(n, 2);
       if (enemy && now - (n.lastAttack || 0) > 800) {
-        n.state = 'fighting';
-        n.fightingUntil = now + 1000; // swing for 1 second
-        n.lastAttack = now;
-        const dmg = 5 + Math.floor(rand() * 10);
-        damageNpc(enemy, dmg, n.id);
-        enemy.damagedUntil = now + 300; // enemy flashes red for 300ms
-        emitFx({ kind: 'attack', x1: n.x, y1: n.y, x2: enemy.x, y2: enemy.y, actorId: n.id, actorType: 'npc' });
-        n.look = enemy.x > n.x ? 1 : 0;
+        // prevent attacking through blocks
+        const mx = Math.floor((n.x + enemy.x) / 2);
+        const my = Math.floor((n.y + enemy.y) / 2);
+        const mid = getTile(mx, my);
+        if (mid !== TILE.AIR && mid !== TILE.SKY) {
+          // blocked line of sight
+        } else {
+          n.state = 'fighting';
+          n.fightingUntil = now + 1000; // swing for 1 second
+          n.lastAttack = now;
+          const dmg = 5 + Math.floor(rand() * 10);
+          damageNpc(enemy, dmg, n.id);
+          enemy.damagedUntil = now + 300; // enemy flashes red for 300ms
+          emitFx({ kind: 'attack', x1: n.x, y1: n.y, x2: enemy.x, y2: enemy.y, actorId: n.id, actorType: 'npc' });
+          n.look = enemy.x > n.x ? 1 : 0;
+        }
       }
     }
     
@@ -994,6 +1103,15 @@ function tickNpcs() {
           }
         }
         n.inv[item] = (n.inv[item] || 0) + 1;
+        if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+      }
+      // if still stuck, mine behind too
+      const bx = Math.floor(n.x - dx);
+      const bt = getTile(bx, ty);
+      if (bt !== TILE.AIR && bt !== TILE.SKY && rand() < 0.15) {
+        setTile(bx, ty, TILE.AIR);
+        const item2 = bt === TILE.TREE ? ITEM.WOOD : bt === TILE.ORE ? ITEM.ORE : bt === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+        n.inv[item2] = (n.inv[item2] || 0) + 1;
         if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
       }
     }
@@ -1472,12 +1590,15 @@ function processAgentAction(act) {
       if (players.has(playerId)) return;
       const spawnX = Math.floor(rand() * WORLD_W);
       const surface = surfaceMap[spawnX] || Math.floor(WORLD_H * 0.25);
+      const spawnY = Math.max(1, surface - 1);
+      setTile(spawnX, spawnY, TILE.AIR);
+      setTile(spawnX, Math.max(0, spawnY - 1), TILE.AIR);
       players.set(playerId, {
         id: playerId,
         name,
         apiKey,
         x: spawnX,
-        y: Math.max(1, surface - 1),
+        y: spawnY,
         hp: 100,
         maxHp: 100,
         inv: {},
@@ -1485,7 +1606,7 @@ function processAgentAction(act) {
         vy: 0,
         look: 1,
         lastSeen: Date.now(),
-        spawn: { x: spawnX, y: Math.max(1, surface - 1) },
+        spawn: { x: spawnX, y: spawnY },
         stats: { kills: 0, deaths: 0, blocksMined: 0, itemsCrafted: 0, playtimeMs: 0 },
       });
       chatLog.push({ ts: Date.now(), message: `🟡 ${name} joined the game` });
