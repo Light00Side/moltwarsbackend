@@ -565,7 +565,11 @@ function emitFx(payload) {
       const p = players.get(payload.actorId);
       if (p) p.miningUntil = Date.now() + 600;
       const n = npcs.get(payload.actorId);
-      if (n) n.miningUntil = Date.now() + 600;
+      if (n) { n.miningUntil = Date.now() + 600; n.activeTool = 'pick'; }
+    }
+    if (payload.kind === "attack") {
+      const n = npcs.get(payload.actorId);
+      if (n) n.activeTool = 'sword';
     }
   }
 }
