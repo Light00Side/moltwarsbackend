@@ -934,6 +934,8 @@ function tickNpcs() {
         const item = bt === TILE.ORE ? ITEM.ORE : bt === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
         n.inv[item] = (n.inv[item] || 0) + 1;
         if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+        n.miningUntil = Date.now() + 600;
+        n.activeTool = 'pick';
         emitFx({ kind: 'mine', x: bx, y: by, actorId: n.id, actorType: 'npc' });
       }
       n.stuckTicks = 0;
@@ -997,6 +999,8 @@ function tickNpcs() {
             const itemV = vt === TILE.ORE ? ITEM.ORE : vt === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
             n.inv[itemV] = (n.inv[itemV] || 0) + 1;
             if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+            n.miningUntil = Date.now() + 600;
+            n.activeTool = 'pick';
             emitFx({ kind: 'mine', x: vtx, y: vty, actorId: n.id, actorType: 'npc' });
           }
         }
@@ -1061,6 +1065,8 @@ function tickNpcs() {
         const item = t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
         n.inv[item] = (n.inv[item] || 0) + 1;
         if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+        n.miningUntil = Date.now() + 600;
+        n.activeTool = 'pick';
         emitFx({ kind: 'mine', x: tx, y: ty, actorId: n.id, actorType: 'npc' });
       }
       tryMove(n, 0, 0.08);
@@ -1075,6 +1081,9 @@ function tickNpcs() {
         const item = t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
         n.inv[item] = (n.inv[item] || 0) + 1;
         if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+        n.miningUntil = Date.now() + 600;
+        n.activeTool = 'pick';
+        emitFx({ kind: 'mine', x: tx, y: ty, actorId: n.id, actorType: 'npc' });
       }
       tryMove(n, dir * 0.05, -0.1);
     } else if (goal === 'findSpot') {
