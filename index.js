@@ -4,6 +4,7 @@ import bodyParser from 'body-parser';
 import { WebSocketServer } from 'ws';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
+import { deflateRawSync } from 'zlib';
 
 const PORT = process.env.PORT || 8080;
 // If using Cloudflare Worker/DO fanout, clients should connect to server.moltwars.xyz (edge).
@@ -542,6 +543,7 @@ function broadcastWorld(payload) {
 
 function emitFx(payload) {
   broadcastWorld({ type: "fx", ...payload, ts: Date.now() });
+  if (payload.actorId) broadcastWorld({ type: "mineState", actorId: payload.actorId, active: payload.kind === "mine" });
 }
 
 function getViewport(p) {
@@ -605,8 +607,8 @@ function nearbyNpcs(p) {
   return out;
 }
 
-function applyGravity(entity) {
-  return;
+function applyGravity(entity, enabled = true) {
+  if (!enabled) return;
 
   const x = Math.floor(entity.x);
   const y = Math.floor(entity.y);
@@ -668,13 +670,32 @@ function isOccupied(exceptId, x, y) {
 }
 
 function tryMove(entity, dx, dy) {
-  const nx = Math.max(0, Math.min(WORLD_W - 1, entity.x + dx));
-  const ny = Math.max(0, Math.min(WORLD_H - 1, entity.y + dy));
+  const stepX = dx > 0 ? 1 : dx < 0 ? -1 : 0;
+  const stepY = dy > 0 ? 1 : dy < 0 ? -1 : 0;
+  const nx = Math.max(0, Math.min(WORLD_W - 1, entity.x + stepX));
+  const ny = Math.max(0, Math.min(WORLD_H - 1, entity.y + stepY));
   const t = getTile(Math.floor(nx), Math.floor(ny));
   if (!isSolid(t) && !isOccupied(entity.id, nx, ny)) {
-    entity.x = Math.round(nx);
-    entity.y = Math.round(ny);
+    entity.x = nx;
+    entity.y = ny;
   }
+}
+
+function tryMoveBig(entity, dx, dy, w = 2, h = 2) {
+  const stepX = dx > 0 ? 1 : dx < 0 ? -1 : 0;
+  const stepY = dy > 0 ? 1 : dy < 0 ? -1 : 0;
+  const nx = Math.max(0, Math.min(WORLD_W - w, entity.x + stepX));
+  const ny = Math.max(0, Math.min(WORLD_H - h, entity.y + stepY));
+  for (let ox = 0; ox < w; ox++) {
+    for (let oy = 0; oy < h; oy++) {
+      const tx = Math.floor(nx + ox);
+      const ty = Math.floor(ny + oy);
+      const t = getTile(tx, ty);
+      if (isSolid(t) || isOccupied(entity.id, tx, ty)) return;
+    }
+  }
+  entity.x = nx;
+  entity.y = ny;
 }
 
 function tickAnimals() {
@@ -714,7 +735,24 @@ function tickAnimals() {
       a.vx = Math.floor(rand() * 3) - 1;
       a.vy = 0;
     }
-    tryMove(a, a.vx * 0.5, 0);
+    // climb over obstacles up to 8 blocks
+    const dir = a.vx || 0;
+    if (dir !== 0) {
+      const tx = Math.floor(a.x + Math.sign(dir));
+      const ty = Math.floor(a.y);
+      const t = getTile(tx, ty);
+      if (isSolid(t)) {
+        // try climb up to 8 blocks
+        for (let up = 1; up <= 8; up++) {
+          if (!isSolid(getTile(tx, ty - up)) && !isSolid(getTile(tx, ty - up - 1))) {
+            a.y = Math.max(1, ty - up);
+            break;
+          }
+        }
+      }
+    }
+    tryMoveBig(a, a.vx * 0.25, 0, 3, 3);
+    applyGravity(a, true);
   }
 }
 
@@ -778,14 +816,15 @@ function damageNpc(n, amount, attackerId) {
   if (n.hp <= 0) {
     // NPC dies
     n.state = 'dead';
-    n.deadUntil = Date.now() + 5000; // respawn in 5s
+    n.deadUntil = Date.now(); // immediate respawn
     if (n.stats) n.stats.deaths = (n.stats.deaths || 0) + 1;
     // Credit kill to attacker
     const attacker = npcs.get(attackerId);
     if (attacker && attacker.stats) {
       attacker.stats.kills = (attacker.stats.kills || 0) + 1;
     }
-    chatLog.push({ ts: Date.now(), message: `🟡 ${n.name} was slain` });
+    const killer = attacker ? attacker.name : 'unknown';
+    chatLog.push({ ts: Date.now(), message: `🟡 ${n.name} was slain by ${killer}` });
     emitFx({ kind: 'explode', x: n.x, y: n.y, actorId: n.id, actorType: 'npc' });
   }
 }
@@ -874,7 +913,7 @@ function tickNpcs() {
     
     // Handle dead NPCs
     if (n.state === 'dead') {
-      if (now > (n.deadUntil || 0)) {
+      if (now >= (n.deadUntil || 0)) {
         respawnNpc(n);
       }
       continue; // skip all other logic while dead
@@ -1074,15 +1113,16 @@ function tickNpcs() {
     }
 
     if (n.vx !== 0) n.look = n.vx > 0 ? 1 : 0;
-    applyGravity(n);
+    applyGravity(n, true);
 
-    // if blocked horizontally, mine forward to keep moving
+    // if blocked horizontally, mine forward to keep moving (rate-limited)
     if (goal === 'tunnel' || goal === 'wander') {
       const dx = n.goalDir || (rand() < 0.5 ? -1 : 1);
       const tx = Math.floor(n.x + dx);
       const ty = Math.floor(n.y);
       const t = getTile(tx, ty);
-      if (t !== TILE.AIR && t !== TILE.SKY && rand() < 0.25) {
+      const canMine = !n.lastMineAt || Date.now() - n.lastMineAt > 800;
+      if (canMine && t !== TILE.AIR && t !== TILE.SKY && rand() < 0.12) {
         setTile(tx, ty, TILE.AIR);
         const item = t === TILE.TREE ? ITEM.WOOD : t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
         // vein mining: clear nearby ore
@@ -1102,11 +1142,12 @@ function tickNpcs() {
         }
         n.inv[item] = (n.inv[item] || 0) + 1;
         if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+        n.lastMineAt = Date.now();
       }
       // if still stuck, mine behind too
       const bx = Math.floor(n.x - dx);
       const bt = getTile(bx, ty);
-      if (bt !== TILE.AIR && bt !== TILE.SKY && rand() < 0.15) {
+      if (bt !== TILE.AIR && bt !== TILE.SKY && rand() < 0.08 && (!n.lastMineAt || Date.now() - n.lastMineAt > 800)) {
         setTile(bx, ty, TILE.AIR);
         const item2 = bt === TILE.TREE ? ITEM.WOOD : bt === TILE.ORE ? ITEM.ORE : bt === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
         n.inv[item2] = (n.inv[item2] || 0) + 1;
@@ -1114,7 +1155,7 @@ function tickNpcs() {
       }
     }
     // Mine nearby block (goal-driven)
-    if (isBelowDirt(n.x, n.y) && (goal === 'tunnel' ? rand() < 0.08 : rand() < 0.015)) {
+    if (isBelowDirt(n.x, n.y) && (goal === 'tunnel' ? rand() < 0.02 : rand() < 0.005)) {
       let dx;
       let dy;
       if (goal === 'tunnel' || goal === 'shaft') {
@@ -1341,10 +1382,12 @@ wss.on('connection', (ws, req) => {
             chests.set(key, chest);
             t.inv = {};
 
+            emitFx({ kind: 'explode', x: t.x, y: t.y, actorId: t.id, actorType: 'player' });
             t.hp = 100;
             t.x = t.spawn.x;
             t.y = findSurfaceY(t.spawn.x);
-            const deathMsg = `${t.name} died and respawned`;
+            const killerName = p?.name || 'unknown';
+            const deathMsg = `🟡 ${t.name} was slain by ${killerName}`;
             addChat(deathMsg);
             broadcast({ type: 'chat', message: deathMsg });
           }
@@ -1500,7 +1543,7 @@ setInterval(() => {
     const p = players.get(playerId);
     if (!p) continue;
     p.lastSeen = Date.now();
-    applyGravity(p);
+    applyGravity(p, true);
     // keep moltbots underground
     if (p.y <= (surfaceMap[Math.max(0, Math.min(WORLD_W - 1, Math.floor(p.x)))] || Math.floor(WORLD_H * 0.25)) - 1) {
       tryMove(p, 0, 1);
@@ -1559,7 +1602,11 @@ setInterval(() => {
 if (process.env.MOLT_EDGE_PUSH_URL && process.env.MOLT_EDGE_SECRET) {
   setInterval(async () => {
     try {
-      const payload = JSON.stringify(getWorldSnapshot());
+      const snapshot = getWorldSnapshot();
+      const json = JSON.stringify(snapshot);
+      const compressed = deflateRawSync(Buffer.from(json));
+      const b64 = compressed.toString('base64');
+      const payload = JSON.stringify({ type: 'world', compressed: 'deflate', data: b64 });
       const resp = await fetch(process.env.MOLT_EDGE_PUSH_URL, {
         method: 'POST',
         headers: {
@@ -1569,8 +1616,8 @@ if (process.env.MOLT_EDGE_PUSH_URL && process.env.MOLT_EDGE_SECRET) {
         body: payload,
       });
       // Process queued actions from DO
-      const result = await resp.json();
-      if (result.ok && Array.isArray(result.actions)) {
+      const result = await resp.json().catch(() => null);
+      if (result?.ok && Array.isArray(result.actions)) {
         for (const act of result.actions) {
           processAgentAction(act);
         }
