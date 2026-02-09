@@ -672,8 +672,8 @@ function tryMove(entity, dx, dy) {
   const ny = Math.max(0, Math.min(WORLD_H - 1, entity.y + dy));
   const t = getTile(Math.floor(nx), Math.floor(ny));
   if (!isSolid(t) && !isOccupied(entity.id, nx, ny)) {
-    entity.x = nx;
-    entity.y = ny;
+    entity.x = Math.round(nx);
+    entity.y = Math.round(ny);
   }
 }
 
@@ -857,19 +857,17 @@ function tickNpcs() {
     const moved = Math.abs(n.x - n.lastX) + Math.abs(n.y - n.lastY);
     if (moved < 0.01) n.stuckTicks = (n.stuckTicks || 0) + 1; else { n.stuckTicks = 0; n.lastX = n.x; n.lastY = n.y; }
     if (n.stuckTicks > 10) {
-      const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-      for (const [dx,dy] of dirs) {
-        const tx = Math.floor(n.x + dx);
-        const ty = Math.floor(n.y + dy);
-        const t = getTile(tx, ty);
-        if (t !== TILE.AIR && t !== TILE.SKY) {
-          setTile(tx, ty, TILE.AIR);
-          const item = t === TILE.ORE ? ITEM.ORE : t === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
-          n.inv[item] = (n.inv[item] || 0) + 1;
-          if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
-          emitFx({ kind: 'mine', x: tx, y: ty, actorId: n.id, actorType: 'npc' });
-          break;
-        }
+      // mine block behind to unstick
+      const dx = n.goalDir || (rand() < 0.5 ? -1 : 1);
+      const bx = Math.floor(n.x - dx);
+      const by = Math.floor(n.y);
+      const bt = getTile(bx, by);
+      if (bt !== TILE.AIR && bt !== TILE.SKY) {
+        setTile(bx, by, TILE.AIR);
+        const item = bt === TILE.ORE ? ITEM.ORE : bt === TILE.STONE ? ITEM.STONE : ITEM.DIRT;
+        n.inv[item] = (n.inv[item] || 0) + 1;
+        if (n.stats) n.stats.blocksMined = (n.stats.blocksMined || 0) + 1;
+        emitFx({ kind: 'mine', x: bx, y: by, actorId: n.id, actorType: 'npc' });
       }
       n.stuckTicks = 0;
     }
